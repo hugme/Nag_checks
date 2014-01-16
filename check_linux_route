@@ -1,0 +1,179 @@
+#!/bin/bash
+# 
+# Plugin to check routes on a *nix host
+# I may write an sh compatable version of this if requested. Right now it requires Bash >= v3
+VERSION="version 0.1.0"
+MOD="05-09-2013"
+# 
+##########################################################
+
+NETSTAT_CHECK="/bin/netstat"
+
+##########################################################
+# We call them functions because they're fun
+##########################################################
+
+print_help() {
+cat << EOF
+Route check pluging for nagios
+Version: $VERSION
+Last Modified: $MOD
+
+This check is able to look at your routing table and search for items you select. It was built for the netstat command in linux and may need some modification to work with other operating systems.
+
+Currently this software is limited to checking IPv4 routes only. I don't currently have a plan to add in IPv6
+
+Usage: check_route -(cr) -n [COUNT] -d [DESTINATION IP] -s [SOURCE IP] -g [GATEWAY] -m [MASK] -f [INTERFACE]
+
+Options:
+ -c			Use the routing cache instead of the static rout table
+ -d [DESTINATION IP]	Destination ip address of the route
+ -i [INTERFACE]		interface of the route
+ -g [GATEWAY]		gateway of the route
+ -h			Print the help menu
+ --help			Print the entire help page with examples
+ -L			Used with -n to give allowances for "Less Than"
+ -M			Used with -n to give allowances for "More Than"
+ -m [MASK]		network mask of the route (Cannot be used with -c)
+ -n [COUNT]		Number of routes it should find (default is 1)
+ -s [SOURCE IP]		Source IP address (for use only with the -c flag)
+
+To reverse the command (crit if the route exists) just use "-n 0"
+
+At a minium at least one of the -f, -g, -i or -m flags with their approprate defitions are required. You can put in multiple definitions such as -d 10.0.0.1 -g 1.2.3.4 and it will only look for routes where both items are true.
+
+EOF
+	}
+
+print_extended_help() {
+cat << EOF
+EXAMPLES:
+
+check_route -d 10.0.0.1 -g 0.0.0.0
+
+A simple check to make sure you have a default route set up correctly. This is good to use by itself (as long as nagios is on the same network) but even better in conjunction with puppet when you're using multiple default routes and need to make sure each machine is going to the correct place.
+
+check_route -d 192.168.1.1 -n 0
+
+This will make sure a route does not exist. It's very useful when moving a device to a new network and you need to make sure the old routes no longer exist.
+
+check_route -i eth3 -M -n 5
+
+This will be ok as long as there are move than 5 routes on eth3.
+
+check_route -c -L -n 1000 -i eth2
+
+This command will look in your dynamic route cache instead of your static routing table. It will go critical if more than 1000 routes are created to eth2. This command is a crude way of detecting a DDOS attack.
+
+check_route -c -M -n 0 -i eth1
+
+This command is great for passively tracking performance data. You can see what routes are beeing added or deleted from an interface.
+
+EOF
+}
+
+invalid_type() {
+	echo "\nInvalid $1\n"
+	print_help
+	exit 3
+	}
+
+##############################################
+## Suck in the user input
+##############################################
+
+
+while test -n "$1"; do
+	case $1 in
+		--help) print_help ; print_extended_help ; exit 0 ;;
+		-h) print_help ; exit 0 ;;
+		-i) INTERFACE=$2; shift ;;
+		-g) GATEWAY=$2; shift ;;
+		-d) DST_IP=$2; shift ;;
+		-s) SRC_IP=$2; shift ;;
+		-m) MASK=$2; shift ;;
+		-n) TOTAL=$2;shift ;;
+		-c) CACHE_SEARCH=yes;;
+		-M) MORE=yes ;;
+		-L) LESS=yes ;;
+	esac
+	shift
+done
+
+[[ -z $TOTAL ]] && TOTAL=1
+
+##############################################
+## Check user input
+##############################################
+
+[[ ! -z $SRC_IP && -z CACHE_SEARCH ]] && ERROR="$ERROR \n Source IP address (-s) can only be specified for a cache search (-c)"
+[[ ! -z $MASK && CACHE_SEARCH == yes ]] && ERROR="$ERROR \n The subnet mask (-m) cannot be used in conjunction with cache search (-c)"
+[[ -z $INTERFACE && -z $GATEWAY && -z $DST_IP && -z $MASK ]] && ERROR="$ERROR \n You must choose at leaset one field to search by" 
+[[ MORE == yes && LESS == yes ]] && ERROR="$ERROR \n You cannot specify both more and less"
+[[ MORE == yes && -z $TOTAL ]] && ERROR="$ERROR \n You have to specify a count to use more."
+[[ LESS == yes && -z $TOTAL ]] && ERROR="$ERROR \n You have to specify a count to use less."
+[[ ${#DST_IP} -gt 16 ]] && ERROR="$ERROR \n The IP address is too long"
+[[ ${#INTERFACE} -gt 16 ]] && ERROR="$ERROR \n The INTERFACE is too long"
+[[ ${#GATEWAY} -gt 16 ]] && ERROR="$ERROR \n The GATEWAY is too long"
+[[ ${#MASK} -gt 16 ]] && ERROR="$ERROR \n The NETMASK is too long"
+
+[[ ! -z $ERROR ]] && {
+	echo "Syntax error"
+	printf "$ERROR"
+	print_help
+	exit 3
+	}
+
+##############################################
+## Do the work
+## check the iscsiadm command
+## grab the lines we need
+## Print the information
+##############################################
+
+[[ $CACHE_SEARCH == yes ]] && {
+  COUNT=0
+  while read CHECK_SRC CHECK_DST CHECK_GATE _ _ _ _ CHECK_INTERFACE ; do
+    unset CHECK
+    [[ ! -z $SRC_IP ]] && {
+	[[ $DST_IP == $SRC_IP && $CHECK != no ]] && { CHECK=yes; }  || { CHECK=no; }
+    }
+    [[ ! -z $DST_IP ]] && {
+	[[ $MASK == $CHECK_DST && $CHECK != no ]] && { CHECK=yes; }  || { CHECK=no; }
+    }
+    [[ ! -z $GATEWAY ]] && {
+	[[ $GATEWAY == $CHECK_GATE && $CHECK != no ]] && { CHECK=yes; }  || { CHECK=no; }
+    }
+    [[ ! -z $INTERFACE ]] && {
+	[[ $INTERFACE == $CHECK_INTERFACE && $CHECK != no ]] && { CHECK=yes; }  || { CHECK=no; }
+    }
+    [[ $CHECK == yes ]] && COUNT=$((++COUNT))
+  done< <($NETSTAT_CHECK -rnC | grep ^[0-9])
+} || { 
+  while read CHECK_IP CHECK_GATE CHECK_MASK _ _ _ _ CHECK_INTERFACE ; do
+    unset CHECK
+    [[ ! -z $DST_IP ]] && {
+	[[ $DST_IP == $CHECK_IP && $CHECK != no ]] && { CHECK=yes; }  || { CHECK=no; }
+    }
+    [[ ! -z $GATEWAY ]] && {
+	[[ $GATEWAY == $CHECK_GATE && $CHECK != no ]] && { CHECK=yes; }  || { CHECK=no; }
+    }
+    [[ ! -z $MASK ]] && {
+	[[ $MASK == $CHECK_MASK && $CHECK != no ]] && { CHECK=yes; }  || { CHECK=no; }
+    }
+    [[ ! -z $INTERFACE ]] && {
+	[[ $INTERFACE == $CHECK_INTERFACE && $CHECK != no ]] && { CHECK=yes; }  || { CHECK=no; }
+    }
+    [[ $CHECK == yes ]] && COUNT=$((++COUNT))
+  done< <($NETSTAT_CHECK -rn | grep ^[0-9])
+}
+
+
+[[ ( $MORE == yes && $COUNT -ge $TOTAL ) || ( $LESS == YES && $COUNT -le $TOTAL ) || $COUNT == $TOTAL ]] && {
+	echo "OK - This route is ok|Routes:$COUNT;0;$TOTAL"
+	exit 0
+} || {
+	echo "CRITICAL - Route is not ok, I see $COUNT routes and I should see $TOTAL|Routes:$COUNT;0;$TOTAL" 
+	exit 2
+}
+

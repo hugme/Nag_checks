@@ -1,0 +1,95 @@
+#!/bin/bash
+# 
+# Plugin to check the iscsi status
+# I may write an sh compatable version of this if requested. Right now it requires Bash >= v3
+VERSION="version 1.0.0"
+MOD="05-09-2013"
+# 
+##########################################################
+
+ISCSI_CHECK="/sbin/iscsiadm -m session"
+
+##########################################################
+# We call them functions because they're fun
+##########################################################
+
+print_help() {
+cat << EOF
+ISCSI Plugin for Nagios
+Version: $VERSION
+Last Modified: $MOD
+
+You can use the ip address or the IQN to look for a session. If you have multiple paths your IQN could possibly be the same so it's suggested to use the IP address or assign a different IQN for each path. There is no warning and no need to set a critical, if it's working your OK, if it's not working your critical. You can request a number of sessions from iscsi.
+
+Usage: check_iscsi -i [IP ADDRESS] -q [IQN] (-c [total sessions])
+
+Options:
+ -i [IP address]	The IP address of the iscsi server you're checking
+ -q [IQN code]		The IQN code of the iscsi path you're checking
+ -c [count]		The number of sessions matching your criteria (not required)
+
+EOF
+	}
+
+invalid_type() {
+	echo "\nInvalid $1\n"
+	print_help
+	exit 3
+	}
+
+##############################################
+## Suck in the user input
+##############################################
+
+
+while test -n "$1"; do
+	case $1 in
+		--help) print_help ; exit 0 ;;
+		-h) print_help ; exit 0 ;;
+		-i) IP_ADD=$2; shift ;;
+		-q) IQN=$2 ;;
+		-c) TOTAL=$2 ;;
+	esac
+	shift
+done
+
+[[ -z $TOTAL ]] && TOTAL=1
+
+##############################################
+## Check user input
+##############################################
+
+[[ -z $IP_ADD && -z $IQN ]] && ERROR="Either an IP Address or an IQN are required"
+[[ ${#IP_ADD} -gt 16 ]] && ERROR="The IP address is too long"
+[[ ${#IQN} -gt 128 ]] && ERROR="The IQN address is too long - ${#IQN}"
+
+[[ ! -z $ERROR ]] && {
+	echo "Syntax error"
+	echo $ERROR
+	exit 3
+	}
+
+##############################################
+## Do the work
+## check the iscsiadm command
+## grab the lines we need
+## Print the information
+##############################################
+
+COUNT=0
+while read _ _ TEST_ADDRESS TEST_IQN _ ; do
+	[[ $IP_ADD == ${TEST_ADDRESS%%:*} || $IQN == $TEST_IQN ]] && ((COUNT++))
+done< <($ISCSI_CHECK)
+
+[[ $COUNT == $TOTAL ]] && {
+	[[ ! -z $IP_ADD ]] && {
+	echo "OK - Host is logged into iSCSI IP address $IP_ADD"
+	} || {
+	echo "OK - Host is logged into $COUNT port on $IQN"
+	}
+	exit 0
+} || {
+	echo "CRITICAL - Total sessions are $COUNT and should be $TOTAL for $IP_ADD $IQN"
+	exit 2
+}
+
