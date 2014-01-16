@@ -1,0 +1,413 @@
+#!/bin/bash
+
+##############################################
+## This project was built to check networking
+## from the servers point of view. It is
+## nice for a device which you don't have
+## access to network hardware such as a
+## public cloud or managed NOC.
+##############################################
+
+##############################################
+## Set some user variables
+##############################################
+
+TMP_DIR="/tmp/check_linux_net"
+IFCONFIG="/sbin/ifconfig"
+NETDEV="/proc/net/dev"
+
+
+###################################################
+## We call them functions because they're fun
+###################################################
+
+print_help() {
+cat << EOF
+Last Modified: 2013.10.31
+
+Usage: check_linux_net
+
+Options:
+ -h			= Display the help page
+ -hh			= Display an extended help page with calculations
+
+Basic Arguments
+ -i [interface]		= Interface, or leave blank for all
+ -m [tmp suffix]	= suffix to use for temporary files.
+ -l			= Show data since the last run instead of per second
+ -d [debug level]	= debug for testing (do not run on nagios with debug on)
+
+To set your warning and critical levels
+ -ki[0-9999999999]	= Your warning level in kilobytes IN.
+ -ko [0-9999999999]	= Your warning level in kilobytes OUT.
+ -kt [0-9999999999]	= Your warning level in kilobytes TOTAL
+ -pi [0-999999]		= Your warning level in packets IN.
+ -po [0-999999]		= Your warning level in packets OUT.
+ -pt [0-999999]		= Your warning level in packets TOTAL.
+ -ei [0-9999]		= Your warning level errors IN
+ -eo [0-9999]		= Your warning level errors OUT
+ -et [0-9999]		= Your warning level errors TOTAL
+ -di[0-9999]		= Your warning level for dropped packets
+
+ -Ki [0-9999999999]	= Your critical level in kilobytes IN.
+ -Ko 0-9999999999]	= Your critical level in kilobytes OUT.
+ -Kt 0-9999999999]	= Your critical level in kilobytes TOTAL.
+ -Pi [0-999999]		= Your critical level in packets IN.
+ -Po [0-999999]		= Your critical level in packets OUT.
+ -Pt [0-999999]		= Your critical level in packets TOTAL.
+ -Ei [0-9999]		= Your critical level errors IN
+ -Eo [0-9999]		= Your critical level errors OUT
+ -Et [0-9999]		= Your critical level errors TOTAL
+ -Di [0-9999]		= Your critical level for dropped packets
+
+To adjust performance data
+ -D [B,K,M,G,T]		= divider B=bytes, K=kilobytes, M=megabytes, G=gigabytes, T=terabytes
+                          (for performance data)
+ -b			= output is in bits instead of bytes
+ -S [SHOW]		= a list of the performance data you would like to see seperated by
+                           commas. If order is important they will output in the same order
+			   you give them. The default is:
+				DATA_TOT,PKT_TOT,ERR_TOT,DROP
+
+Show Data
+    DATA_IN		= Amount of data incomming. Kilobytes by default, change this default
+                          with -d. 	
+    DATA_OUT		= Amount of data outgoing. Kilobytes by default, change this default
+                          with -d. 	
+    DATA_TOT		= Amount of total data. Kilobytes by default, change this default
+                          with -d. 
+    PKT_IN		= Number of packing incomming
+    PKT_OUT		= Number of packing outgoing
+    PKT_TOT		= Number of packing total
+    ERR_IN		= Incomming packet errors
+    ERR_OUT		= Outgoing packet errors
+    ERR_TOT		= Total packet errors
+    DROP		= Dropped packets. These are incoming only.
+
+
+Leaving your warking and/or critical blank or setting them to 0 will disable the alert. This is
+useful if you are only trying to build statictical data.
+
+Leaving your divider blank will show in bytes. If your REALLY useing this to watch more than a
+terabyte of traffic go by every 5 minutes let me know... That's just cool. If you need it it's
+there.
+
+The temporary directory is required and can be changed as a variable within the script. If you
+want to run this script in multiple intervals make sure you use -m so the temporary
+files don't overlap.
+
+EOF
+        }
+print_ext_help() {
+cat << EOF
+###############################
+## EXTENDED HELP INFORMATION ##
+###############################
+
+This check relys on the kernel and the network driver for the interface it's checking. I was going to
+pull data driectly from the hardware however these calls are expensive on the system and I would
+prefer as little impact as possible. This being said the data is only as accurate as the kernel and
+network driver can provide. Keep this in mind when especially using experimental or new code.
+
+
+All calculations are done in Bytes. If you set it for bits (-b) it will calulate it before displaying
+as: Bytes * 8 = Bits
+
+Other calculations are as followes
+	1 Kilobyte = 2^10 Bytes
+	1 Megabyte = 2^20 Bytes
+	1 Gigabyte = 2^30 Bytes
+	1 Terabyte = 2^40 Bytes
+
+EOF
+}
+
+print_error() {
+        printf "\nError: \n"
+        status_messages[$DISTILLER_UNKNOWN]="Something is wrong with your script, you should check it"
+        print_help
+        exit 3
+        }
+check_for_number() {
+	[[ -n $(echo "$1"|tr -d [:digit:]) ]] && echo 1
+	}
+check_for_alnum() {
+	[[ -n $(echo "$1"|tr -d [:alnum:]) ]] && echo 1
+	}
+set_warn() {
+	[[ $X_STATUS != 2 ]] && X_STATUS=1
+	}
+
+##############################################
+## Suck in the user input
+##############################################
+
+unset WARN CRIT SHOW_DATA DIV INT MON DEBUG BIT ERROR
+while [[ -n "$1" ]]; do
+    case $1 in
+	--help) print_help ; exit 0 ;;
+	-h) print_help ; exit 0 ;;
+	-hh) print_help; print_ext_help ; exit 0 ;;
+	-ki) WARN[11]=$2; shift ;;
+	-ko) WARN[12]=$2; shift ;;
+	-kt) WARN[13]=$2; shift ;;
+	-pi) WARN[21]=$2; shift ;;
+	-po) WARN[22]=$2; shift ;;
+	-pt) WARN[23]=$2; shift ;;
+	-ei) WARN[31]=$2; shift ;;
+	-eo) WARN[32]=$2; shift ;;
+	-et) WARN[33]=$2; shift ;;
+	-di) WARN[50]=$2; shift ;;
+	-Ki) CRIT[11]=$2; shift ;;
+	-Ko) CRIT[12]=$2; shift ;;
+	-Kt) CRIT[13]=$2; shift ;;
+	-Pi) CRIT[21]=$2; shift ;;
+	-Po) CRIT[22]=$2; shift ;;
+	-Pt) CRIT[23]=$2; shift ;;
+	-Ei) CRIT[31]=$2; shift ;;
+	-Eo) CRIT[32]=$2; shift ;;
+	-Et) CRIT[33]=$2; shift ;;
+	-Di) CRIT[50]=$2; shift ;;
+
+	-S) SHOW_DATA=$2; shift ;;
+
+	-D) DIV=$2; shift ;;
+	-b) SHOW_BITS="ON";;
+	-l) LAST_RUN="ON";;
+
+	-i) INT=$2; shift ;;
+	-m) MON="${2}_"; shift
+		[[ -n "$(check_for_alnum $MON)" ]] && ERROR="$ERROR\nInvalad characters were found in your temporary file suffix" ;;
+	-d) DEBUG="1";;
+	-dd) DEBUG="1";;
+    esac
+    shift
+done
+
+[[ -n $SHOW_BITS ]] && BB_TYPE="bits" || BB_TYPE="bytes"
+[[ -n $LAST_RUN ]] && LR_TYPE="since the last run" || LR_TYPE="Per Second"
+WARN_NAME[11]="$BB_TYPE $LR_TYPE in"
+WARN_NAME[12]="$BB_TYPE $LR_TYPE out"
+WARN_NAME[13]="$BB_TYPE $LR_TYPE total"
+WARN_NAME[21]="Packets $LR_TYPE in"
+WARN_NAME[22]="Packets $LR_TYPE out"
+WARN_NAME[23]="Packets $LR_TYPE total"
+WARN_NAME[31]="Errors in"
+WARN_NAME[32]="Errors out"
+WARN_NAME[33]="Errors total"
+
+##############################################
+## Set the defaults if needed
+##############################################
+
+[ -z "$DIV" ] && DIV="b"
+case $DIV in
+    b|B) DIVNUM=1;unset DIV;PERF_DIV=B;;
+    k|K) DIVNUM=1024; DIV="K";PERF_DIV=KB;;
+    m|M) DIVNUM=1048576; DIV="M";PERF_DIV=MB;;
+    g|G) DIVNUM=1073741824; DIV="G";PERF_DIV=GB;;
+    t|T) DIVNUM=1099511627776; DIV="T";PERF_DIV=TB;;
+    *) ERROR="Invalid Divider (-D argument)"
+esac
+
+
+##############################################
+## Check user input
+##############################################
+
+
+for CK_TYPE in {11..13} {21..23} {31..33}; do
+    unset BAD_CHAR
+    [[ -z "${WARN[$CK_TYPE]}" && -n "${CRIT[$CK_TYPE]}" ]] && ERROR="$ERROR\nWarning amount for ${WARN_NAME[$CK_TYPE]} was missing"
+    [[ -n "${WARN[$CK_TYPE]}" ]] && {
+	[ -z ${CRIT[$CK_TYPE]} ] && ERROR="$ERROR\nCritical amount for ${WARN_NAME[$CK_TYPE]} was missing"
+	[[ -n $(check_for_number "${WARN[$CK_TYPE]}") ]] && {
+		ERROR="$ERROR\nInvalid Characters in warning for ${WARN_NAME[$CK_TYPE]}"
+		BAD_CHAR=YES
+		}
+	[[ -n $(check_for_number "${CRIT[$CK_TYPE]}") ]] && {
+		ERROR="$ERROR\nInvalid Characters in critical for ${WARN_NAME[$CK_TYPE]}"
+		BAD_CHAR=YES
+		}
+	[[ -z $BAD_CHAR ]] && {
+	case $CK_TYPE in 
+	    1[1-3]) [[ "${WARN[$CK_TYPE]}" -ge 10000000000 ]] && ERROR="$ERROR\nYour $BB_TYPE warning is set too high" 
+		[[ "${CRIT[$CK_TYPE]}" -ge 10000000000 ]] && ERROR="$ERROR\nYour $BB_TYPE critical is set too high" ;;
+	    2[1-3]) [[ "${WARN[$CK_TYPE]}" -ge 1000000 ]] && ERROR="$ERROR\nYour packet warning is set too high" 
+		[[ "${CRIT[$CK_TYPE]}" -ge 1000000 ]] && ERROR="$ERROR\nYour packet critical is set too high" ;;
+	    3[1-3]) [[ "${WARN[$CK_TYPE]}" -ge 10000 ]] && ERROR="$ERROR\nYour error warning is set too high" 
+		[[ "${CRIT[$CK_TYPE]}" -ge 10000 ]] && ERROR="$ERROR\nYour error critical is set too high" ;;
+	esac
+	}
+    }
+done
+
+
+##############################################
+## Check Stuff; fix if needed
+##############################################
+
+[[ ! -d $TMP_DIR ]] && { mkdir -p $TMP_DIR || ERROR="$ERROR\nSorry, I could not make the directory"; }
+[[ -n $IFACE && -n $(grep "${IFACE}:" /proc/net/dev) ]] && ERROR="$ERROR\nThe interface $IFACE does not exist"
+
+##############################################
+## Do the work
+## grab the lines we need
+## Print the information
+##############################################
+
+[[ $DEBUG == 1 ]] && {
+	echo "This is how you have me set up"
+	echo "Interfaces = $INT"
+	for CK_TYPE in {11..13} {21..23} {31..33}; do
+		echo "Warning Level-${WARN_NAME[$CK_TYPE]}	= ${WARN[$CK_TYPE]}"
+		echo "Critical Level${WARN_NAME[$CK_TYPE]}	= ${CRIT[$CK_TYPE]}"
+	done
+	echo "Show Data = $SHOW_DATA"
+	[[ -n $LAST_RUN ]] && echo "I will show from the last run." || echo "I will show the average per second"
+	[[ -n $SHOW_BITS ]] && echo "I will show in Bits." || echo "I will show in bytes."
+}
+
+[[ -z $ERROR ]] && {
+
+[[ $WARN != 0 ]] && VAR_INFO=" -v warn=$WARN"
+[[ $CRIT != 0 ]] && VAR_INFO=" -v crit=$CRIT"
+[[ -n $DIV ]] && VAR_INFO=" -v divnum=$DIVNUM"
+
+## multiple interfaces hasn't been tested yet
+## fixed? there is a divide by zero error if it's run too soon
+## fixed? error checking needs to be added inside the "for"
+## debugging needs to be added
+
+[[ -z $INT ]] && INT="$(awk -F : '{if ($1 !~ "^Inter-" && $1 !~ "face" && $1 !~ "lo$") print $1}' $NETDEV)"
+
+# EPOC=0 IN_PKT=1 IN_ERR=2 IN_DROP=3 IN_BYTE=4 OUT_PKT=5  OUT_ERR=6 OUT_BYTE=7 COLL=8 TOT_PKT=50 TOT_ERR=51 TOT_BYTE=52
+	[[ $DEBUG == 1 ]] && {
+		printf "\nThis is the data I found:\n"
+		printf "These are all the interfaces on the box: $(awk -F : '{if ($1 !~ "^Inter-" && $1 !~ "face" && $1 !~ "lo$") print $1}' $NETDEV)\n"
+	}
+
+for IFACE in $INT; do
+  [[ $DEBUG == 1 ]] && {
+	printf "I am processing for: $IFACE\n"
+  }
+  ## Gather information
+  TMP_NAME="$TMP_DIR/${MON}${IFACE}"
+  sed -n "s/${IFACE}:\(.*\)/\1/p" $NETDEV | awk -v epoc=$(date +%s) '{print epoc" "$2" "$3" "$4" "$1" "$10" "$11" "$9" "$4}' > ${TMP_NAME}_new
+  [[ -f $TMP_NAME ]] && {
+        unset NEW LAST i
+        NEW=($(cat ${TMP_NAME}_new) )
+        LAST=($(cat ${TMP_NAME}) )
+        for i in {0..8} ; do
+	    [[ -n ${NEW[$i]} && -n ${LAST[$i]} ]] && {
+                CURRENT[$i]=$((${NEW[$i]}-${LAST[$i]}))
+  		[[ -z $LAST_RUN && $i != 0 ]] && CURRENT[$i]=$(echo "${CURRENT[$i]}/${CURRENT[0]}"|bc)
+	    }
+	    [[ $DEBUG == 1 ]] && {
+		DEBUG_DATA="\tLast Run:\t${LAST[$i]}\n\t\t\tThis Run:\t${NEW[$i]}\n\t\t\tDifference:\t${CURRENT[$i]}"
+		case $i in
+			0) printf "Time:\t\t\tLast Run:\t$(echo ${LAST[$I]}| awk '{print strftime("%c",$1)}')\n\t\tSeconds since last run:\t${CURRENT[$i]}" ;;
+			1) printf "Incomming Packets:$DEBUG_DATA";;
+			2) printf "Incomming Errors:$DEBUG_DATA";;
+			3) printf "Incomming dropped:$DEBUG_DATA";;
+			4) printf "Incomming Bytes:$DEBUG_DATA";;
+			5) printf "Outgoing Packets:$DEBUG_DATA";;
+			6) printf "Outgoing Errors:$DEBUG_DATA";;
+			7) printf "Outgoing Bytes:\t$DEBUG_DATA";;
+			8) printf "Collisions:\t$DEBUG_DATA";;
+		esac
+		printf "\n"
+	    }
+        done
+  }
+
+  ## Check information for errors
+  for i in {0..8} ; do
+    [[ -z ${CURRENT[$i]} ]] && ERROR="$ERROR\n Input data is missing. check your -i argument"
+    [[ ${CURRNET[$i]} -lt 0 ]] && exit 0
+  done
+  [[ ${CURRENT[0]} == 0 ]] && ERROR="$ERROR\n You must wait at least 1 second before running this script again"
+  
+  ## Print information
+  [[ -z $ERROR ]] && {
+
+  mv ${TMP_NAME}_new $TMP_NAME
+  CURRENT[50]=$((${CURRENT[1]}+${CURRENT[5]}))
+  CURRENT[51]=$((${CURRENT[2]}+${CURRENT[6]}))
+  CURRENT[52]=$((${CURRENT[4]}+${CURRENT[7]}))
+  for i in 4 7 52 ; do
+    [[ $SHOW_BITS == ON && $i != 0 ]] && {
+	CURRENT[$i]=$(echo "${CURRENT[$i]}*8"|bc)
+    }
+    CURRENT[$i]=$(echo "${CURRENT[$i]}/$DIVNUM" | bc)
+  done
+
+  [[ $SHOW_BITS == ON ]] && {
+	DIV="${DIV}bits"
+  } || {
+	DIV="${DIV}bytes"
+  }
+
+  [[ -z $LAST_RUN ]] && {
+	TXTSCALE="average per second over the last ${CURRENT[0]} seconds."
+  } || {
+	TXTSCALE="total for the last ${CURRENT[0]} seconds."
+  }
+
+  ##############################################
+  ## Exit Status
+  ##############################################
+
+  X_STATUS=0
+  [[ -n ${WARN[11]} && ${CURRENT[4]} -gt ${WARN[11]} ]] && { X_TEXT="${X_TEXT} ${CURRENT[4]} ${DIV} incomming data $TXTSCALE"; [[ ${CURRENT[4]} -gt ${CRIT[11]} ]] && X_STATUS=2 || set_warn; }
+  [[ -n ${WARN[12]} && ${CURRENT[7]} -gt ${WARN[12]} ]] && { X_TEXT="${X_TEXT} ${CURRENT[7]} ${DIV} outgoing data $TXTSCALE"; [[ ${CURRENT[7]} -gt ${CRIT[12]} ]] && X_STATUS=2 || set_warn; }
+  [[ -n ${WARN[13]} && ${CURRENT[52]} -gt ${WARN[13]} ]] && { X_TEXT="${X_TEXT} ${CURRENT[52]} ${DIV} total data $TXTSCALE"; [[ ${CURRENT[52]} -gt ${CRIT[13]} ]] && X_STATUS=2 || set_warn; }
+  [[ -n ${WARN[21]} && ${CURRENT[1]} -gt ${WARN[21]} ]] && { X_TEXT="${X_TEXT} ${CURRENT[1]} incomming packets $TXTSCALE"; [[ ${CURRENT[1]} -gt ${CRIT[21]} ]] && X_STATUS=2 || set_warn; }
+  [[ -n ${WARN[22]} && ${CURRENT[5]} -gt ${WARN[22]} ]] && { X_TEXT="${X_TEXT} ${CURRENT[5]} outgoing packets $TXTSCALE"; [[ ${CURRENT[5]} -gt ${CRIT[22]} ]] && X_STATUS=2 || set_warn; }
+  [[ -n ${WARN[23]} && ${CURRENT[50]} -gt ${WARN[23]} ]] && { X_TEXT="${X_TEXT} ${CURRENT[50]} total packets $TXTSCALE"; [[ ${CURRENT[50]} -gt ${CRIT[23]} ]] && X_STATUS=2 || set_warn; }
+  [[ -n ${WARN[31]} && ${CURRENT[2]} -gt ${WARN[31]} ]] && { X_TEXT="${X_TEXT} ${CURRENT[2]} incomming errors $TXTSCALE"; [[ ${CURRENT[2]} -gt ${CRIT[31]} ]] && X_STATUS=2 || set_warn; }
+  [[ -n ${WARN[32]} && ${CURRENT[6]} -gt ${WARN[32]} ]] && { X_TEXT="${X_TEXT} ${CURRENT[6]} outgoing errors $TXTSCALE"; [[ ${CURRENT[6]} -gt ${CRIT[32]} ]] && X_STATUS=2 || set_warn; }
+  [[ -n ${WARN[33]} && ${CURRENT[51]} -gt ${WARN[33]} ]] && { X_TEXT="${X_TEXT} ${CURRENT[51]} total errors $TXTSCALE"; [[ ${CURRENT[51]} -gt ${CRIT[33]} ]] && X_STATUS=2 || set_warn; }
+  [[ -n ${WARN[50]} && ${CURRENT[3]} -gt ${WARN[50]} ]] && { X_TEXT="${X_TEXT} ${CURRENT[3]} incomming dropped $TXTSCALE"; [[ ${CURRENT[3]} -gt ${CRIT[50]} ]] && X_STATUS=2 || set_warn; }
+
+  case $X_STATUS in
+	0) X_MESSAGE="OK" ;;
+	1) X_MESSAGE="WARNING: " ;;
+	2) X_MESSAGE="CRITICAL:" ;;
+	*) X_MESSAGE="UNKNOWN: " ;;
+  esac	
+  [[ -n $X_TEXT ]] && printf "${0##*/} $X_MESSAGE $X_TEXT|" || printf "${0##*/} ${X_MESSAGE}|"
+
+  ##############################################
+  ## Output Performance data
+  ##############################################
+
+[[ -z $SHOW_DATA ]] && SHOW_DATA="DATA_TOT,PKT_TOT,ERR_TOT,DROP"
+
+for CURR_SHOW_DATA in $(echo $SHOW_DATA | tr [:lower:] [:upper:] | tr "," " "); do
+    case $CURR_SHOW_DATA in
+	DATA_IN) PERF_DATA="${PERF_DATA} 'Incoming Data ($DIV)'=${CURRENT[4]}${PERF_DIV}:${WARN[11]}:${CRIT[11]}::" ;;
+	DATA_OUT) PERF_DATA="${PERF_DATA} 'Outgoing Data ($DIV)'=${CURRENT[7]}${PERF_DIV}:${WARN[12]}:${CRIT[12]}::" ;;
+	DATA_TOT) PERF_DATA="${PERF_DATA} 'Total Data ($DIV)'=${CURRENT[52]}${PERF_DIV}:${WARN[13]}:${CRIT[13]}::" ;;
+	PKT_IN) PERF_DATA="${PERF_DATA} 'Incoming Packets'=${CURRENT[1]}:${WARN[21]}:${CRIT[21]}::" ;;
+	PKT_OUT) PERF_DATA="${PERF_DATA} 'Outgoing Packets'=${CURRENT[5]}:${WARN[22]}:${CRIT[22]}::" ;;
+	PKT_TOT) PERF_DATA="${PERF_DATA} 'Total Packets'=${CURRENT[50]}:${WARN[23]}:${CRIT[23]}::" ;;
+	ERR_IN) PERF_DATA="${PERF_DATA} 'Incoming Errors'=${CURRENT[2]}:${WARN[31]}:${CRIT[31]}::" ;;
+	ERR_OUT) PERF_DATA="${PERF_DATA} 'Outgoing Errors'=${CURRENT[6]}:${WARN[32]}:${CRIT[32]}::" ;;
+	ERR_TOT) PERF_DATA="${PERF_DATA} 'Total Errors'=${CURRENT[51]}:${WARN[33]}:${CRIT[33]}::" ;;
+	DROP) PERF_DATA="${PERF_DATA} 'Dropped Packets'=${CURRENT[3]}:${WARN[50]}:${CRIT[50]}::" ;;
+    esac	
+done
+printf "${PERF_DATA}\n"
+}
+
+done
+}
+
+[[ -n $ERROR ]] && {
+	printf "$ERROR\n"
+	X_STATUS=3
+}
+
+exit $X_STATUS
+
