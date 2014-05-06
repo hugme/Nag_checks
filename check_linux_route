@@ -131,8 +131,8 @@ done
 ## Print the information
 ##############################################
 
+COUNT=0
 [[ $CACHE_SEARCH == yes ]] && {
-  COUNT=0
   while read CHECK_SRC CHECK_DST CHECK_GATE _ _ _ _ CHECK_INTERFACE ; do
     unset CHECK
     [[ ! -z $SRC_IP ]] && {
