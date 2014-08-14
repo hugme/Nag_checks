@@ -328,7 +328,11 @@ for IFACE in $INT; do
   done
   [[ ${CURRENT[0]} == 0 ]] && ERROR="$ERROR\n You must wait at least 1 second before running this script again"
   
-[[ ! -f $TMP_NAME && -f ${TMP_NAME}_new ]] && mv ${TMP_NAME}_new $TMP_NAME
+[[ ! -f $TMP_NAME && -f ${TMP_NAME}_new ]] && { 
+  mv ${TMP_NAME}_new $TMP_NAME
+  echo "Network First Run: OK |"
+  exit 0
+  }
 
   ## Print information
   [[ -z $ERROR ]] && {
