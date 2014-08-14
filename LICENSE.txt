@@ -1,0 +1,9 @@
+Everything in this repository is set under the lunch licence.
+
+You may use it, modify it, redistribute it, sell it, profit off it,
+learn from it and do whatever you wish with it. If however you
+are using it and like the software and you ever meet me you owe
+me a lunch.
+
+You're also welcome to use the Lunch Licence for your own software
+if you choose.
