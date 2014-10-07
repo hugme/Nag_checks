@@ -47,9 +47,9 @@ while test -n "$1"; do
 	case $1 in
 		--help) print_help ; exit 0 ;;
 		-h) print_help ; exit 0 ;;
-		-w) WARN=$2; shift ;;
-		-c) CRIT=$2; shift ;;
-		-d) DIV=$2; shift ;;
+		-w) WARN="$2"; shift ;;
+		-c) CRIT="$2"; shift ;;
+		-d) DIV="$2"; shift ;;
 		-f) FC=1 ;;
 	esac
 	shift
@@ -68,11 +68,11 @@ done
 ## Check user input
 ##############################################
 
-[ ! -z `echo $WARN | tr -d [:digit:]` ] && invalid_type warning
-[ ! -z `echo $CRIT | tr -d [:digit:]` ] && invalid_type critical
-[ "${WARN%.*}" -ge 100 ] && invalid_type warning
-[ "${CRIT%.*}" -ge 100 ] && invalid_type critical
-[ "${CRIT%.*}" -gt "${WARN%.*}" ] && invalid_type critical
+[ ! -z `echo $WARN | tr -d [:digit:]` ] && invalid_type "Warning: Warning value can only contain numbers"
+[ ! -z `echo $CRIT | tr -d [:digit:]` ] && invalid_type "Critical: Critical value can only contain numbers"
+[ "${WARN%.*}" -ge 100 ] && invalid_type "Warning: Warning must be smaller than 100%"
+[ "${CRIT%.*}" -ge 100 ] && invalid_type "Critical: Critical must be smaller than 100%"
+[ "${CRIT%.*}" -gt "${WARN%.*}" ] && invalid_type "Critical: Your Warning must be Higher than your Critical"
 
 case $DIV in
 	k|K) DIVNUM=1;;
