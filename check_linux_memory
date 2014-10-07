@@ -68,8 +68,8 @@ done
 ## Check user input
 ##############################################
 
-echo $WARN | grep -v [0-9.] > /dev/null && invalid_type warning
-echo $CRIT | grep -v [0-9.] > /dev/null && invalid_type critical
+[ ! -z `echo $WARN | tr -d [:digit:]` ] && invalid_type warning
+[ ! -z `echo $CRIT | tr -d [:digit:]` ] && invalid_type critical
 [ "${WARN%.*}" -ge 100 ] && invalid_type warning
 [ "${CRIT%.*}" -ge 100 ] && invalid_type critical
 [ "${CRIT%.*}" -gt "${WARN%.*}" ] && invalid_type critical
