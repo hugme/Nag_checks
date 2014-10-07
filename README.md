@@ -3,6 +3,8 @@ Nag_checks
 
 Nagios Checks
 
+My git hub repository is here: https://github.com/hugme/Nag_checks
+
 These are some of the nagios checks I've built over the years. I'll be adding to here as I write more.
 
 check_iscsi - great for checking your iscsi connections to make sure they're up

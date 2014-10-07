@@ -6,6 +6,9 @@
 ## nice for a device which you don't have
 ## access to network hardware such as a
 ## public cloud or managed NOC.
+##
+## You can find the lastest version of my
+## nagios checks here: https://github.com/hugme/Nag_checks
 ##############################################
 
 ##############################################

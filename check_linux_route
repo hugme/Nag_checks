@@ -2,6 +2,7 @@
 # 
 # Plugin to check routes on a *nix host
 # I may write an sh compatable version of this if requested. Right now it requires Bash >= v3
+# You can find the lastest version of my nagios checks here: https://github.com/hugme/Nag_checks
 VERSION="version 0.1.0"
 MOD="05-09-2013"
 # 

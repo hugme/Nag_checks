@@ -2,8 +2,9 @@
 # 
 # Plugin to check system memory
 # by hugme (nagios@hugme.org)
+# You can find my checks here: https://github.com/hugme/Nag_checks
 # Nagios script to check memory usage on linux server
-# version 1.1.1
+# version 1.2.0
 # 
 ##########################################################
 
@@ -17,8 +18,8 @@ print_help() {
 cat << EOF
 Linux Memory Plugin for Nagios
 Copyright (c) hugme (nagios@hugme.org)
-Version: 1.1.1
-Last Modified: 10-18-2010
+Version: 1.2.0
+Last Modified: 10-07-2014
 License: This software can be used for free unless I meet you, then you owe me lunch.
 
 Usage: check_linux_memory -w [warning %] -c [critical %]
