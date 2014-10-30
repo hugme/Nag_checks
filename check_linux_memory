@@ -45,15 +45,15 @@ invalid_type() {
 
 
 while test -n "$1"; do
-	case $1 in
-		--help) print_help ; exit 0 ;;
-		-h) print_help ; exit 0 ;;
-		-w) WARN="$2"; shift ;;
-		-c) CRIT="$2"; shift ;;
-		-d) DIV="$2"; shift ;;
-		-f) FC=1 ;;
-	esac
-	shift
+ case $1 in
+  --help) print_help ; exit 0 ;;
+  -h) print_help ; exit 0 ;;
+  -w) WARN="$2"; shift ;;
+  -c) CRIT="$2"; shift ;;
+  -d) DIV="$2"; shift ;;
+  -f) FC=1 ;;
+ esac
+ shift
 done
 
 ##############################################
@@ -102,7 +102,7 @@ RESULT=$(awk -v warn=$WARN -v crit=$CRIT -v div=$DIV -v divnum=$DIVNUM -v fc=$FC
 /^Cached:/ { cache=$2 }
 /^Active:/ { active=$2 }
 /^Inactive:/ { inactive=$2 }
-END { if ( fc == 1 ) { free=free+cache }
+END { if ( fc == 1 ) { free=free+cache+buff }
 	{ freeperct=free/tot*100 }
 	if ( freeperct > warn ) { result="OK" ; xit="0"}
 	if ( freeperct <= warn ) {
