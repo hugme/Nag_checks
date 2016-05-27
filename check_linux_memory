@@ -4,7 +4,7 @@
 # by hugme (nagios@hugme.org)
 # You can find my checks here: https://github.com/hugme/Nag_checks
 # Nagios script to check memory usage on linux server
-# version 1.2.0
+# version 1.3.0
 # 
 ##########################################################
 
@@ -28,8 +28,8 @@ Options:
  -w [0-99]		= Your warning %. 20 means 20% of your memory can remain before a warning alarm. Do not use the % sign.
  -c [0-99]		= Your critical %. 10 means 10% of your memory can remain before a critical alarm. Do not use the % sign.
  -d [K,M,G,T]	= divider K=kilobytes, M=megabytes, G=gigabytes, T=terabytes
- -f		= Include cached memory as free memory when calculating your percentage free
-
+ -f		= Included for backwards compatability to older verserions
+ -n		= Don't Include cached memory as free memory when calculating your percentage free
 EOF
 	}
 
@@ -51,7 +51,7 @@ while test -n "$1"; do
   -w) WARN="$2"; shift ;;
   -c) CRIT="$2"; shift ;;
   -d) DIV="$2"; shift ;;
-  -f) FC=1 ;;
+  -n) NC=1 ;;
  esac
  shift
 done
@@ -95,14 +95,14 @@ esac
 ## Print the information
 ##############################################
 
-RESULT=$(awk -v warn=$WARN -v crit=$CRIT -v div=$DIV -v divnum=$DIVNUM -v fc=$FC '/^MemTotal:/ { total=$2 }
+RESULT=$(awk -v warn=$WARN -v crit=$CRIT -v div=$DIV -v divnum=$DIVNUM -v nc=$NC '/^MemTotal:/ { total=$2 }
 /^MemTotal:/ { tot=$2 }
 /^MemFree:/ { free=$2 }
 /^Buffers:/ { buff=$2 }
 /^Cached:/ { cache=$2 }
 /^Active:/ { active=$2 }
 /^Inactive:/ { inactive=$2 }
-END { if ( fc == 1 ) { free=free+cache+buff }
+END { if ( nc != 1 ) { free=free+cache+buff }
 	{ freeperct=free/tot*100 }
 	if ( freeperct > warn ) { result="OK" ; xit="0"}
 	if ( freeperct <= warn ) {
