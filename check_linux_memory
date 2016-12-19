@@ -98,20 +98,22 @@ esac
 RESULT=$(awk -v warn=$WARN -v crit=$CRIT -v div=$DIV -v divnum=$DIVNUM -v nc=$NC '/^MemTotal:/ { total=$2 }
 /^MemTotal:/ { tot=$2 }
 /^MemFree:/ { free=$2 }
+/^MemAvailable:/ { available=$2 }
 /^Buffers:/ { buff=$2 }
 /^Cached:/ { cache=$2 }
 /^Active:/ { active=$2 }
 /^Inactive:/ { inactive=$2 }
 END { if ( nc != 1 ) { free=free+cache+buff }
+  if ( available ) { free=available }
 	{ freeperct=free/tot*100 }
 	if ( freeperct > warn ) { result="OK" ; xit="0"}
 	if ( freeperct <= warn ) {
 		if ( freeperct > crit ) { result="WARNING" ; xit="1" }
 		else if ( freeperct <= crit ) { result="CRITICAL" ; xit="2" }
 		}
-	{print xit" MEMORY "result" - "freeperct"% Free - Total:"tot/divnum div" Active:"active/divnum div" Inactive:"inactive/divnum div" Buffers:"buff/divnum div" Cached:"cache/divnum div" |Free="freeperct";"warn";"crit";0 Active="active";0;0;0 Inactive="inactive";0;0;0 Buffers="buff";0;0;0 Cached="cache";0;0;0" }
+  if ( available ) {print xit" MEMORY "result" - "freeperct"% Free - Total:"tot/divnum div" Available: "available/divnum div" Active:"active/divnum div" Inactive:"inactive/divnum div" Buffers:"buff/divnum div" Cached:"cache/divnum div" |Free="freeperct";"warn";"crit";0 Available="available";0;0;0 Active="active";0;0;0 Inactive="inactive";0;0;0 Buffers="buff";0;0;0 Cached="cache";0;0;0" }
+  else {print xit" MEMORY "result" - "freeperct"% Free - Total:"tot/divnum div" Active:"active/divnum div" Inactive:"inactive/divnum div" Buffers:"buff/divnum div" Cached:"cache/divnum div" |Free="freeperct";"warn";"crit";0 Active="active";0;0;0 Inactive="inactive";0;0;0 Buffers="buff";0;0;0 Cached="cache";0;0;0" }
 	}' /proc/meminfo)
 
 echo ${RESULT#* }
 exit ${RESULT%% *}
-
