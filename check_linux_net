@@ -395,16 +395,16 @@ for IFACE in $INT; do
 
 for CURR_SHOW_DATA in $(echo $SHOW_DATA | tr [:lower:] [:upper:] | tr "," " "); do
     case $CURR_SHOW_DATA in
-	DATA_IN) PERF_DATA="${PERF_DATA} 'Incoming Data ($DIV)'=${CURRENT[4]}${PERF_DIV}:${WARN[11]}:${CRIT[11]}::" ;;
-	DATA_OUT) PERF_DATA="${PERF_DATA} 'Outgoing Data ($DIV)'=${CURRENT[7]}${PERF_DIV}:${WARN[12]}:${CRIT[12]}::" ;;
-	DATA_TOT) PERF_DATA="${PERF_DATA} 'Total Data ($DIV)'=${CURRENT[52]}${PERF_DIV}:${WARN[13]}:${CRIT[13]}::" ;;
-	PKT_IN) PERF_DATA="${PERF_DATA} 'Incoming Packets'=${CURRENT[1]}:${WARN[21]}:${CRIT[21]}::" ;;
-	PKT_OUT) PERF_DATA="${PERF_DATA} 'Outgoing Packets'=${CURRENT[5]}:${WARN[22]}:${CRIT[22]}::" ;;
-	PKT_TOT) PERF_DATA="${PERF_DATA} 'Total Packets'=${CURRENT[50]}:${WARN[23]}:${CRIT[23]}::" ;;
-	ERR_IN) PERF_DATA="${PERF_DATA} 'Incoming Errors'=${CURRENT[2]}:${WARN[31]}:${CRIT[31]}::" ;;
-	ERR_OUT) PERF_DATA="${PERF_DATA} 'Outgoing Errors'=${CURRENT[6]}:${WARN[32]}:${CRIT[32]}::" ;;
-	ERR_TOT) PERF_DATA="${PERF_DATA} 'Total Errors'=${CURRENT[51]}:${WARN[33]}:${CRIT[33]}::" ;;
-	DROP) PERF_DATA="${PERF_DATA} 'Dropped Packets'=${CURRENT[3]}:${WARN[50]}:${CRIT[50]}::" ;;
+	DATA_IN) PERF_DATA="${PERF_DATA} 'Incoming Data ($DIV)'=${CURRENT[4]}${PERF_DIV};${WARN[11]};${CRIT[11]}" ;;
+	DATA_OUT) PERF_DATA="${PERF_DATA} 'Outgoing Data ($DIV)'=${CURRENT[7]}${PERF_DIV};${WARN[12]};${CRIT[12]}" ;;
+	DATA_TOT) PERF_DATA="${PERF_DATA} 'Total Data ($DIV)'=${CURRENT[52]}${PERF_DIV};${WARN[13]};${CRIT[13]}" ;;
+	PKT_IN) PERF_DATA="${PERF_DATA} 'Incoming Packets'=${CURRENT[1]};${WARN[21]};${CRIT[21]}" ;;
+	PKT_OUT) PERF_DATA="${PERF_DATA} 'Outgoing Packets'=${CURRENT[5]};${WARN[22]};${CRIT[22]}" ;;
+	PKT_TOT) PERF_DATA="${PERF_DATA} 'Total Packets'=${CURRENT[50]};${WARN[23]};${CRIT[23]}" ;;
+	ERR_IN) PERF_DATA="${PERF_DATA} 'Incoming Errors'=${CURRENT[2]};${WARN[31]};${CRIT[31]}" ;;
+	ERR_OUT) PERF_DATA="${PERF_DATA} 'Outgoing Errors'=${CURRENT[6]};${WARN[32]};${CRIT[32]}" ;;
+	ERR_TOT) PERF_DATA="${PERF_DATA} 'Total Errors'=${CURRENT[51]};${WARN[33]};${CRIT[33]}" ;;
+	DROP) PERF_DATA="${PERF_DATA} 'Dropped Packets'=${CURRENT[3]};${WARN[50]};${CRIT[50]}" ;;
     esac	
 done
 printf "${PERF_DATA}\n"
