@@ -1,14 +1,15 @@
 #!/bin/sh
-# 
+#
 # Plugin to check system memory
 # by hugme (nagios@hugme.org)
 # You can find my checks here: https://github.com/hugme/Nag_checks
 # Nagios script to check memory usage on linux server
 # version 1.3.0
-# 
+#
 ##########################################################
 
 MEMINFO="/proc/meminfo"
+OOMKILLINFO="/proc/vmstat"
 
 ##########################################################
 # We call them functions because they're fun
@@ -28,7 +29,7 @@ Options:
  -w [0-99]		= Your warning %. 20 means 20% of your memory can remain before a warning alarm. Do not use the % sign.
  -c [0-99]		= Your critical %. 10 means 10% of your memory can remain before a critical alarm. Do not use the % sign.
  -d [K,M,G,T]	= divider K=kilobytes, M=megabytes, G=gigabytes, T=terabytes
- -f		= Included for backwards compatability to older verserions
+ -f		= Included for backwards compatability to older versions
  -n		= Don't Include cached memory as free memory when calculating your percentage free
 EOF
 	}
@@ -52,6 +53,8 @@ while test -n "$1"; do
   -c) CRIT="$2"; shift ;;
   -d) DIV="$2"; shift ;;
   -n) NC=1 ;;
+  -k) THRESHOLD_OOMKILL="$2"; shift ;;
+  -K) DISABLE_OOMKILL=1 ;;
  esac
  shift
 done
@@ -64,6 +67,8 @@ done
 [ -z "$CRIT" ] && CRIT=10
 [ -z "$DIV" ] && DIV=M
 [ -z "$FC" ] && FC=0
+[ -z "$DISABLE_OOMKILL" ] && DISABLE_OOMKILL=""
+[ -z "$THRESHOLD_OOMKILL" ] && THRESHOLD_OOMKILL=0
 
 ##############################################
 ## Check user input
@@ -80,13 +85,18 @@ case $DIV in
 	m|M) DIVNUM=1024;;
 	g|G) DIVNUM=1048576;;
 	t|T) DIVNUM=1073741824;;
-	*) invalid_type;; 
+	*) invalid_type;;
 esac
 
 [ ! -f "$MEMINFO" ] && {
 	echo "Your Memory info file seems to be missing"
 	exit 1
 	}
+
+if [ -z "$DISABLE_OOMKILL" ] && ! grep '^oom_kill ' "$OOMKILLINFO" >/dev/null 2>&1; then
+	echo "UNKNOWN threshold set for oom_kill but the counter not available in '$OOMKILLINFO'."
+	exit 3
+fi
 
 ##############################################
 ## Do the work
@@ -95,13 +105,14 @@ esac
 ## Print the information
 ##############################################
 
-RESULT=$(awk -v warn=$WARN -v crit=$CRIT -v div=$DIV -v divnum=$DIVNUM -v nc=$NC '/^MemTotal:/ { total=$2 }
+RESULT=$(awk -v warn=$WARN -v crit=$CRIT -v div=$DIV -v divnum=$DIVNUM -v nc=$NC -v disable_oomkill=$DISABLE_OOMKILL -v threshold_oomkill=$THRESHOLD_OOMKILL '/^MemTotal:/ { total=$2 }
 /^MemTotal:/ { tot=$2 }
 /^MemFree:/ { free=$2 }
 /^Buffers:/ { buff=$2 }
 /^Cached:/ { cache=$2 }
 /^Active:/ { active=$2 }
 /^Inactive:/ { inactive=$2 }
+/^oom_kill / { oomkill=$2 }
 END { if ( nc != 1 ) { free=free+cache+buff }
 	{ freeperct=free/tot*100 }
 	if ( freeperct > warn ) { result="OK" ; xit="0"}
@@ -109,8 +120,13 @@ END { if ( nc != 1 ) { free=free+cache+buff }
 		if ( freeperct > crit ) { result="WARNING" ; xit="1" }
 		else if ( freeperct <= crit ) { result="CRITICAL" ; xit="2" }
 		}
-	{print xit" MEMORY "result" - "freeperct"% Free - Total:"tot/divnum div" Active:"active/divnum div" Inactive:"inactive/divnum div" Buffers:"buff/divnum div" Cached:"cache/divnum div" |Free="freeperct";"warn";"crit";0 Active="active";0;0;0 Inactive="inactive";0;0;0 Buffers="buff";0;0;0 Cached="cache";0;0;0" }
-	}' /proc/meminfo)
+	if ( disable_oomkill != 1 ) {
+		oomkill_display=" OOMKills:"oomkill
+		oomkill_perfdata=" oomkill="oomkill";;"threshold_oomkill";0"
+		if ( oomkill > threshold_oomkill ) { result="CRITICAL - Out of memory kills detected" ; xit="2" }
+	}
+	{print xit" MEMORY "result" - "freeperct"% Free - Total:"tot/divnum div" Active:"active/divnum div" Inactive:"inactive/divnum div" Buffers:"buff/divnum div" Cached:"cache/divnum div" "oomkill_display" |Free="freeperct";"warn";"crit";0 Active="active";0;0;0 Inactive="inactive";0;0;0 Buffers="buff";0;0;0 Cached="cache";0;0;0"oomkill_perfdata }
+	}' "$MEMINFO" "$OOMKILLINFO" )
 
 echo ${RESULT#* }
 exit ${RESULT%% *}
