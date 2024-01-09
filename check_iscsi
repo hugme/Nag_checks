@@ -20,7 +20,7 @@ ISCSI Plugin for Nagios
 Version: $VERSION
 Last Modified: $MOD
 
-You can use the ip address or the IQN to look for a session. If you have multiple paths your IQN could possibly be the same so it's suggested to use the IP address or assign a different IQN for each path. There is no warning and no need to set a critical, if it's working your OK, if it's not working your critical. You can request a number of sessions from iscsi.
+You can use the ip address or the IQN to look for a session. If you have multiple paths your IQN could possibly be the same so it's suggested to use the IP address or assign a different IQN for each path. There is no warning and no need to set a critical, if it's working you're OK, if it's not working you're critical. You can request a number of sessions from iscsi.
 
 Usage: check_iscsi -i [IP ADDRESS] -q [IQN] (-c [total sessions])
 
