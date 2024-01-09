@@ -31,6 +31,8 @@ Options:
  -d [K,M,G,T]	= divider K=kilobytes, M=megabytes, G=gigabytes, T=terabytes
  -f		= Included for backwards compatability to older versions
  -n		= Don't Include cached memory as free memory when calculating your percentage free
+ -K		= Don't check the OutOfMemory Kill counter
+ -k [0-9999]	= Threshold for OOMKill alert (default: 0)
 EOF
 	}
 
